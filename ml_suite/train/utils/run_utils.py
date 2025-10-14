@@ -75,3 +75,30 @@ def compute_metrics(
         metric_value = metric(x, target)
         metrics_values[metric_name] = metric_value
     return metrics_values
+
+
+def base_attribute(obj, attr: str):
+    """Get the base attribute of an object.
+
+    This function retrieves the base attribute of an object, bypassing any
+    wrappers such as DistributedDataParallel (DDP) or torch.compile. It is
+    useful for accessing the original model or component when it has been
+    wrapped for distributed training or optimization.
+
+    Parameters
+    ----------
+    obj : Any
+        The object from which to retrieve the base attribute.
+    attr : str
+        The name of the attribute to retrieve.
+
+    Returns
+    -------
+    Any
+        The base attribute of the object.
+    """
+    # Unwrap DistributedDataParallel if applicable
+    if isinstance(obj, torch.nn.parallel.DistributedDataParallel):
+        obj = obj.module
+
+    return getattr(obj, attr)

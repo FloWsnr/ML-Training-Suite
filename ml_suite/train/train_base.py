@@ -193,6 +193,7 @@ class Trainer:
 
             # Save epoch checkpoint
             save_checkpoint(
+                global_rank=self.global_rank,
                 checkpoint_path=epoch_dir / "checkpoint.pt",
                 model=self.model,
                 optimizer=self.optimizer,
@@ -225,6 +226,7 @@ class Trainer:
             self.state.epoch += 1
 
         save_checkpoint(
+            global_rank=self.global_rank,
             checkpoint_path=self.output_dir / "latest.pt",
             model=self.model,
             optimizer=self.optimizer,
@@ -346,20 +348,18 @@ class Trainer:
             ) * self.checkpoint_every_updates
 
             if self.state.batches_trained >= next_checkpoint - 1:
-                if self.ddp_enabled:
-                    dist.barrier()
-                if self.global_rank == 0:
-                    save_checkpoint(
-                        checkpoint_path=self.output_dir / "latest.pt",
-                        model=self.model,
-                        optimizer=self.optimizer,
-                        samples_trained=self.state.samples_trained,
-                        batches_trained=self.state.batches_trained,
-                        epoch=self.state.epoch,
-                        grad_scaler=self.scaler,
-                        scheduler=self.lr_scheduler,
-                    )
-                    self.log_msg("Saved latest checkpoint")
+                save_checkpoint(
+                    global_rank=self.global_rank,
+                    checkpoint_path=self.output_dir / "latest.pt",
+                    model=self.model,
+                    optimizer=self.optimizer,
+                    samples_trained=self.state.samples_trained,
+                    batches_trained=self.state.batches_trained,
+                    epoch=self.state.epoch,
+                    grad_scaler=self.scaler,
+                    scheduler=self.lr_scheduler,
+                )
+                self.log_msg("Saved latest checkpoint")
 
             if i >= n_updates - 1:
                 break

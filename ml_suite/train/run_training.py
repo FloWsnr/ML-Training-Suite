@@ -112,47 +112,11 @@ def main(
         torch.cuda.manual_seed_all(seed)
 
     ############################################################
-    ###### Load torch modules ##################################
-    ############################################################
-
-    model = get_model(config["model"])
-    model.to(device)
-    criterion = config["model"].get("criterion", "MSE")
-    if criterion.lower() == "mse":
-        criterion_fn = MSE()
-    elif criterion.lower() == "mae":
-        criterion_fn = MAE()
-    else:
-        raise ValueError(f"Unknown criterion {criterion}")
-
-    optimizer = get_optimizer(model, config["optimizer"])
-    dataset_train = get_dataset(config["dataset"], split="train")
-    dataset_val = get_dataset(config["dataset"], split="valid")
-    
-    lr_config = config.get("lr_scheduler", None)
-    if lr_config is not None:
-        lr_scheduler = get_lr_scheduler(
-            optimizer,
-            lr_config,
-            total_batches=total_updates,
-            total_batches_trained=batches_trained,
-        )
-    else:
-        lr_scheduler = None
-
-    # these are used for evaluation during training (Wandb logging)
-    # these are NOT the loss functions used for training (see criterion)
-    eval_loss_fns = {
-        "MSE": MSE(),
-        "MAE": MAE(),
-        "RMSE": RMSE(),
-        "NRMSE": NRMSE(),
-        "VRMSE": VRMSE(),
-    }
-
-    ############################################################
     ###### Load datasets and dataloaders #######################
     ############################################################
+
+    dataset_train = get_dataset(config["dataset"], split="train")
+    dataset_val = get_dataset(config["dataset"], split="valid")
 
     train_dataloader = get_dataloader(
         dataset=dataset_train,
@@ -170,11 +134,38 @@ def main(
         is_distributed=dist.is_initialized(),
         shuffle=False,
     )
+
+    ############################################################
+    ###### Load torch modules ##################################
+    ############################################################
+
+    model = get_model(config["model"])
+    model.to(device)
+
+    criterion = config["model"].get("criterion", "MSE")
+    if criterion.lower() == "mse":
+        criterion_fn = MSE()
+    elif criterion.lower() == "mae":
+        criterion_fn = MAE()
+    else:
+        raise ValueError(f"Unknown criterion {criterion}")
+
+    # these are used for evaluation during training (Wandb logging)
+    # these are NOT the loss functions used for training (see criterion)
+    eval_loss_fns = {
+        "MSE": MSE(),
+        "MAE": MAE(),
+        "RMSE": RMSE(),
+        "NRMSE": NRMSE(),
+        "VRMSE": VRMSE(),
+    }
+
     ############################################################
     ###### Load checkpoint #####################################
     ############################################################
 
     grad_scaler_sd: Optional[dict] = None
+    checkpoint: Optional[dict] = None
 
     cp_config: dict = config.get("checkpoint", {})
     checkpoint_name = cp_config.get("checkpoint_name", None)
@@ -187,24 +178,12 @@ def main(
 
             checkpoint = load_checkpoint(checkpoint_path, device)
             model.load_state_dict(checkpoint["model_state_dict"], strict=True)
+
             if cp_config.get("restart", True):
-                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-
-                grad_scaler_sd = checkpoint["grad_scaler_state_dict"]
-
                 samples_trained = checkpoint["samples_trained"]
                 batches_trained = checkpoint["batches_trained"]
                 epoch = checkpoint["epoch"]
 
-                if lr_scheduler and lr_config is not None:
-                    # we have to recreate lr-s with correct batches trained
-                    lr_scheduler = get_lr_scheduler(
-                        optimizer,
-                        lr_config,
-                        total_batches=total_updates,
-                        total_batches_trained=batches_trained,
-                    )
-                    lr_scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         else:
             logger.warning(
                 f"Checkpoint {checkpoint_path} not found, starting from scratch"
@@ -217,14 +196,49 @@ def main(
     compile_model = config.get("compile", False)
     if compile_model and not platform.system() == "Windows":
         model = torch.compile(model, mode="max-autotune")
+        logger.info("Model compiled with torch.compile")
     if world_size > 1:
         model = DDP(
             model,
             device_ids=[local_rank],
             output_device=device,
         )
+        logger.info("Model wrapped with DDP")
 
     wandb_logger.watch(model, criterion=criterion_fn)
+
+    ############################################################
+    ###### Setup optimizers and lr schedulers ##################
+    ############################################################
+
+    optimizer = get_optimizer(model, config["optimizer"])  # type: ignore
+
+    lr_config = config.get("lr_scheduler", None)
+    if lr_config is not None:
+        lr_scheduler = get_lr_scheduler(
+            optimizer,
+            lr_config,
+            total_batches=total_updates,
+            total_batches_trained=batches_trained,
+        )
+    else:
+        lr_scheduler = None
+
+    if checkpoint is not None:
+        if cp_config.get("restart", True):
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+            grad_scaler_sd = checkpoint["grad_scaler_state_dict"]
+
+            if lr_scheduler and lr_config is not None:
+                # we have to recreate lr-s with correct batches trained
+                lr_scheduler = get_lr_scheduler(
+                    optimizer,
+                    lr_config,
+                    total_batches=total_updates,
+                    total_batches_trained=batches_trained,
+                )
+                lr_scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
     ############################################################
     ###### Initialize trainer ##################################

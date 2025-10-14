@@ -11,7 +11,7 @@ from pathlib import Path
 import wandb
 from wandb.sdk.wandb_run import Run
 
-from ml_suite.train.utils.logger import setup_logger
+from vphysics.train.utils.logger import setup_logger
 
 
 class WandbLogger:
@@ -23,8 +23,8 @@ class WandbLogger:
 
     Parameters
     ----------
-    config : dict
-        Configuration dictionary containing wandb settings
+    wandb_config : WandbConfig
+        WandbConfig object containing wandb settings
     log_dir : Optional[Path], optional
         Directory to save wandb logs, by default None
         Usually to store the logs in the same directory as checkpoints
@@ -36,33 +36,38 @@ class WandbLogger:
         log_dir: Optional[Path] = None,
     ):
         self.config = wandb_config
-        self.config["dir"] = log_dir
+        self.enabled = self.config.get("enabled", False)
+        self.log_dir = log_dir
         self.logger = setup_logger(
             "WandbLogger",
         )
         self.run: Optional[Run] = None
-        self._initialize_wandb()
+        if self.enabled:
+            self._initialize_wandb()
+        else:
+            self.logger.info("Wandb logging is disabled")
 
     def _initialize_wandb(self) -> None:
         """Initialize wandb with error handling."""
         try:
-            wandb_id = self.config.get("id", "test")
-            project = self.config.get("project")
-            entity = self.config.get("entity")
-            tags = self.config.get("tags", [])
-            notes = self.config.get("notes", "")
-            dir = self.config.get("dir", None)
+            # Create a clean wandb ID from the log directory name
+            # Use just the directory name, not the full path
+            if self.log_dir:
+                wandb_id = self.log_dir.name
+            else:
+                wandb_id = None  # Let wandb generate a unique ID
+
             wandb.login()
             self.run = wandb.init(
-                project=project,
-                entity=entity,
+                project=self.config["project"],
+                entity=self.config["entity"],
                 config=self.config,
                 id=wandb_id,
-                dir=dir,
-                tags=tags,
-                notes=notes,
+                dir=self.log_dir,
+                tags=self.config.get("tags", []),
+                notes=self.config.get("notes", ""),
                 resume="allow",
-                settings=wandb.Settings(init_timeout=120),
+                settings={"init_timeout": 60},
             )
             self.logger.info("Successfully initialized wandb")
         except Exception as e:
@@ -81,7 +86,7 @@ class WandbLogger:
         commit : bool, optional
             Whether to commit the data immediately, by default True
         """
-        if self.run is None:
+        if not self.enabled or self.run is None:
             return
 
         try:
@@ -111,7 +116,7 @@ class WandbLogger:
         log_freq : int, optional
             How often to log, by default 100
         """
-        if self.run is None:
+        if not self.enabled or self.run is None:
             return
 
         try:
@@ -132,7 +137,7 @@ class WandbLogger:
         data : Dict[str, Any]
             Dictionary of config values to update
         """
-        if self.run is None:
+        if not self.enabled or self.run is None:
             return
 
         try:
@@ -142,7 +147,7 @@ class WandbLogger:
 
     def finish(self) -> None:
         """Finish the wandb run with error handling."""
-        if self.run is None:
+        if not self.enabled or self.run is None:
             return
 
         try:
@@ -150,32 +155,3 @@ class WandbLogger:
             self.logger.info("Successfully finished wandb run")
         except Exception as e:
             self.logger.error(f"Failed to finish wandb run: {str(e)}")
-
-    # def log_predictions(
-    #     self,
-    #     image_path: Path,
-    #     name_prefix: str,
-    # ) -> None:
-    #     """Log predictions to wandb with error handling.
-
-    #     Parameters
-    #     ----------
-    #     image_path : Path
-    #         Path to the images
-    #     name_prefix : str
-    #         Prefix for the image names
-    #     """
-    #     if self.run is None:
-    #         return
-
-    #     try:
-    #         data = {}
-    #         for image in image_path.glob("**/*.png"):
-    #             img = Image.open(image)
-    #             data[f"{name_prefix}/{image.name}"] = wandb.Image(
-    #                 img, file_type="png", mode="RGB"
-    #             )
-    #         self.run.log(data)
-    #     except Exception as e:
-    #         self.logger.error(f"Failed to log predictions to wandb: {str(e)}")
-

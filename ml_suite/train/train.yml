@@ -89,7 +89,8 @@ lr_scheduler:
 ################################################################
 ########### WandB parameters ############################
 ################################################################
-wandb:
+wandb: # run name is automatically set to directory name this file is in
+  enabled: true
   project: my_ml_project
   entity: my_wandb_username
   tags:

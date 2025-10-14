@@ -2,15 +2,16 @@ from pathlib import Path
 from typing import Optional
 
 import torch
+from torch.distributed.optim import ZeroRedundancyOptimizer
 from torch.amp.grad_scaler import GradScaler
+from torch.nn.modules.utils import consume_prefix_in_state_dict_if_present
 
 
 def sanitize_model_dict(model: torch.nn.Module) -> dict:
     """Sanitize a model's state dict for saving.
 
     This function removes any prefixes added by distributed training or compiling
-    from the state dict keys. This is useful to ensure compatibility when loading
-    the model in different environments.
+    from the state dict keys.
 
     Parameters
     ----------
@@ -23,15 +24,9 @@ def sanitize_model_dict(model: torch.nn.Module) -> dict:
         The sanitized state dict.
     """
     state_dict = model.state_dict()
-    sanitized_dict = {}
-    for key, value in state_dict.items():
-        new_key = key
-        if "module." in key:
-            new_key = key.replace("module.", "")
-        if "_orig_mod." in key:
-            new_key = key.replace("_orig_mod.", "")
-        sanitized_dict[new_key] = value
-    return sanitized_dict
+    consume_prefix_in_state_dict_if_present(state_dict, "module.")
+    consume_prefix_in_state_dict_if_present(state_dict, "_orig_mod.")
+    return state_dict
 
 
 def load_checkpoint(checkpoint_path: Path, device: torch.device) -> dict:
@@ -54,6 +49,7 @@ def load_checkpoint(checkpoint_path: Path, device: torch.device) -> dict:
 
 
 def save_checkpoint(
+    global_rank: int,
     checkpoint_path: Path,
     model: torch.nn.Module,
     optimizer: torch.optim.Optimizer,
@@ -64,14 +60,20 @@ def save_checkpoint(
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler],
 ) -> None:
     """Save a checkpoint."""
-    checkpoint = {
-        "samples_trained": samples_trained,
-        "batches_trained": batches_trained,
-        "epoch": epoch,
-        "model_state_dict": sanitize_model_dict(model),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "grad_scaler_state_dict": grad_scaler.state_dict(),
-    }
-    if scheduler is not None:
-        checkpoint["scheduler_state_dict"] = scheduler.state_dict()
-    torch.save(checkpoint, checkpoint_path)
+    if isinstance(optimizer, ZeroRedundancyOptimizer):
+        # sync the optimizer state dict across ranks, must occur on all ranks
+        optimizer.consolidate_state_dict()
+
+    # save only on rank 0
+    if global_rank == 0:
+        checkpoint = {
+            "samples_trained": samples_trained,
+            "batches_trained": batches_trained,
+            "epoch": epoch,
+            "model_state_dict": sanitize_model_dict(model),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "grad_scaler_state_dict": grad_scaler.state_dict(),
+        }
+        if scheduler is not None:
+            checkpoint["scheduler_state_dict"] = scheduler.state_dict()
+        torch.save(checkpoint, checkpoint_path)
