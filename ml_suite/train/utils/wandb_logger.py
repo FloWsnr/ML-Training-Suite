@@ -11,7 +11,7 @@ from pathlib import Path
 import wandb
 from wandb.sdk.wandb_run import Run
 
-from vphysics.train.utils.logger import setup_logger
+from ml_suite.train.utils.logger import setup_logger
 
 
 class WandbLogger:

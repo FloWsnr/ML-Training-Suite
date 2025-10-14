@@ -25,13 +25,14 @@ The main part of the suite is located in the train directory.
 
 ## Instructions
 1. Fork / copy the repository
-2. Install the required dependencies in a conda environment. Of course, also install your own dependencies if needed, you don't have to use conda but some form of environment management is recommended.
+2. Install miniforge or anaconda if you don't have it already.
+3. Install the required dependencies in a conda environment. Of course, also install your own dependencies if needed, you don't have to use conda but some form of environment management is recommended.
 
 ```bash
 conda create -n train_env python=3.13
 conda activate train_env
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu129
-pip install pyyaml python-dotenv pytest wandb
+pip install pyyaml python-dotenv pytest wandb einops
 pip install -e .
 ```
 
@@ -49,15 +50,16 @@ RESULTS_DIR=/path/to/your/results/dir # checkpoints and wandb files are stored h
 6. Create your dataset code. Make sure the dataset returns a tuple (input, target) for each item or change the code in train and eval.
 7. Check out the loss functions `ml_suite/models/loss_fns.py` and add missing ones.
 
-7. Create a dir for your results
-8. Copy the config file "ml_suite/train/train.yml" to your results dir and modify it as needed. We copy the config file to the results dir to keep track of the exact config used for each run. Important things to change:
+8. Create a dir for your results. The slurm script currently assumes that the results dir is in the top level dir (i.e. the same dir as the .env file). You can change this as needed.
+
+9. Copy the config file "ml_suite/train/train.yml" to your results dir and modify it as needed. We copy the config file to the results dir to keep track of the exact config used for each run. Important things to change:
 - dataset params
 - Make sure to set the correct model params
 - check if your model can be compiled with torch.compile
 - training params (batch size, learning rate, number of updates, etc.)
 - use the correct wandb project name and entity
 
-9. Run the vphysics/train/scripts/train_riv.sh
+10. Run the vphysics/train/scripts/train_riv.sh
 - Make sure set the correct conda env name here or the python path if not using conda
 -
 

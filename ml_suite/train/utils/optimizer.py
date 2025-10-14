@@ -30,8 +30,8 @@ def get_optimizer(model: nn.Module | DDP, config: dict) -> torch.optim.Optimizer
     name = config["name"]
 
     if name == "AdamW":
-        weight_decay = config["weight_decay"]
-        betas = config["betas"]
+        weight_decay = config.get("weight_decay", 0)
+        betas = config.get("betas", (0.9, 0.999))
 
         if isinstance(model, DDP):
             optimizer = ZeroRedundancyOptimizer(
@@ -50,8 +50,8 @@ def get_optimizer(model: nn.Module | DDP, config: dict) -> torch.optim.Optimizer
             )
 
     elif name == "SGD":
-        momentum = config["momentum"]
-        weight_decay = config["weight_decay"]
+        momentum = config.get("momentum", 0)
+        weight_decay = config.get("weight_decay", 0)
 
         if isinstance(model, DDP):
             optimizer = ZeroRedundancyOptimizer(

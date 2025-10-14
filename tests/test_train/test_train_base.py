@@ -64,10 +64,7 @@ def real_dataloader() -> DataLoader:
             return len(self.inputs)
 
         def __getitem__(self, idx):
-            return {
-                "input_fields": self.inputs[idx],
-                "output_fields": self.targets[idx],
-            }
+            return (self.inputs[idx], self.targets[idx])
 
     dataset = TestDataset(input_data, target_data)
     return DataLoader(dataset, batch_size=2, shuffle=False)

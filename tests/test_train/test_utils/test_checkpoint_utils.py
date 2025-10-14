@@ -69,6 +69,7 @@ class TestSaveCheckpoint:
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
 
             save_checkpoint(
+                global_rank=0,
                 checkpoint_path=checkpoint_path,
                 model=model,
                 optimizer=optimizer,
