@@ -10,6 +10,26 @@ authors = [
 ]
 description = "A library for training neural networks"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
+    "torch>=2.0",
+    "torchvision",
+    "pyyaml",
+    "python-dotenv",
+    "wandb",
+    "einops",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[[tool.uv.index]]
+url = "https://download.pytorch.org/whl/cu129"
+name = "pytorch-cu129"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu129" }
+torchvision = { index = "pytorch-cu129" }

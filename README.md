@@ -25,18 +25,16 @@ The main part of the suite is located in the train directory.
 
 ## Instructions
 1. Fork / copy the repository
-2. Install miniforge or anaconda if you don't have it already.
-3. Install the required dependencies in a conda environment. Of course, also install your own dependencies if needed, you don't have to use conda but some form of environment management is recommended.
+2. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if you don't have it already.
+3. Install the required dependencies using uv:
 
 ```bash
-conda create -n train_env python=3.13
-conda activate train_env
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu129
-pip install pyyaml python-dotenv pytest wandb einops
-pip install -e .
+uv sync --extra dev
 ```
 
-3. Create a ``.env`` file with necessary environment variables in the top level directory. We do this to avoid hardcoding paths and sensitive information in the code. This way, you can use different .env files for different setups (local, HPC, etc.). Also, you can easily publish your code without exposing sensitive information. The base dir and results dir are used in the sh script to start the run. Use the data dir in your dataset code.
+This creates a virtual environment in `.venv` and installs all dependencies including PyTorch with CUDA 12.9 support.
+
+4. Create a ``.env`` file with necessary environment variables in the top level directory. We do this to avoid hardcoding paths and sensitive information in the code. This way, you can use different .env files for different setups (local, HPC, etc.). Also, you can easily publish your code without exposing sensitive information. The base dir and results dir are used in the sh script to start the run. Use the data dir in your dataset code.
 
 ```bash
 WANDB_API_KEY=your_api_key_here
@@ -60,8 +58,7 @@ RESULTS_DIR=/path/to/your/results/dir # checkpoints and wandb files are stored h
 - use the correct wandb project name and entity
 
 10. Run the vphysics/train/scripts/train_riv.sh
-- Make sure set the correct conda env name here or the python path if not using conda
--
+- Make sure the script uses the correct Python path (e.g., `.venv/bin/python` if using uv's default venv location)
 
 ## Notes
 

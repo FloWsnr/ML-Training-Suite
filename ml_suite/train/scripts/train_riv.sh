@@ -45,19 +45,16 @@
 # Format: HH:MM:SS
 time_limit="24:00:00"
 
-# activate conda environment
-export CONDA_ROOT=$HOME/miniforge3
-source $CONDA_ROOT/etc/profile.d/conda.sh
-export PATH="$CONDA_ROOT/bin:$PATH"
-conda activate train_env
-
 # Load environment variables from .env file
-# Script is located at results/sim_name/train.sh, .env is at repo root
+# Script is located at ml_suite/train/scripts/train_riv.sh, .env is at repo root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/../../.env"
+ENV_FILE="${SCRIPT_DIR}/../../../.env"
 if [ -f "$ENV_FILE" ]; then
     export $(grep -v '^#' "$ENV_FILE" | xargs)
 fi
+
+# activate uv virtual environment
+source "${BASE_DIR}/.venv/bin/activate"
 
 ######################################################################################
 ############################# Set paths ##############################################
