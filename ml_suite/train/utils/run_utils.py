@@ -77,6 +77,44 @@ def compute_metrics(
     return metrics_values
 
 
+def gather_across_gpus(tensor: torch.Tensor) -> torch.Tensor:
+    """Gather tensors from all GPUs and concatenate them.
+
+    In DDP mode, each GPU processes a different subset of the data.
+    This function gathers tensors from all GPUs and concatenates them
+    along dimension 0 (batch dimension).
+
+    Parameters
+    ----------
+    tensor : torch.Tensor
+        The tensor to gather. Should be on the GPU device.
+        Shape: (local_batch_size, ...) where local_batch_size is the
+        number of samples on this GPU.
+
+    Returns
+    -------
+    torch.Tensor
+        The gathered tensor containing data from all GPUs.
+        Shape: (total_batch_size, ...) where total_batch_size is the
+        sum of local_batch_size across all GPUs.
+        In non-distributed mode, returns the input tensor unchanged.
+    """
+    if not dist.is_initialized():
+        return tensor
+
+    # Get world size (number of GPUs)
+    world_size = dist.get_world_size()
+    if world_size == 1:
+        return tensor
+
+    # Gather tensors from all GPUs
+    gathered_tensors = [torch.zeros_like(tensor) for _ in range(world_size)]
+    dist.all_gather(gathered_tensors, tensor)
+
+    # Concatenate along batch dimension
+    return torch.cat(gathered_tensors, dim=0)
+
+
 def base_attribute(obj, attr: str):
     """Get the base attribute of an object.
 

@@ -7,12 +7,14 @@ Date: 2025-05-01
 from pathlib import Path
 from typing import Optional
 import logging
+import math
 
 import torch
 from torch.utils.data import DataLoader
 import torch.distributed as dist
 
 from ml_suite.train.utils.run_utils import compute_metrics, reduce_all_losses
+from ml_suite.train.utils.logger import setup_logger
 
 
 class Evaluator:
@@ -28,6 +30,12 @@ class Evaluator:
         Dictionary of metrics to evaluate
     eval_dir : Path
         Directory to save evaluation results
+    eval_fraction : float, optional
+        Fraction of validation data to use for evaluation (0.0-1.0), by default 1.0
+    amp : bool, optional
+        Whether to use automatic mixed precision, by default True
+    amp_precision : torch.dtype, optional
+        Precision to use for AMP, by default torch.bfloat16
     global_rank : int, optional
         Global rank for distributed training, by default 0
     local_rank : int, optional
@@ -44,6 +52,7 @@ class Evaluator:
         dataloader: DataLoader,
         metrics: dict[str, torch.nn.Module],
         eval_dir: Path,
+        eval_fraction: float = 1.0,
         amp: bool = True,
         amp_precision: torch.dtype = torch.bfloat16,
         global_rank: int = 0,
@@ -51,8 +60,9 @@ class Evaluator:
         world_size: int = 1,
         logger: Optional[logging.Logger] = None,
     ):
-        self.logger = logger or logging.getLogger(__name__)
+        self.logger = logger or setup_logger("Evaluator", rank=global_rank)
         self.global_rank = global_rank
+        self.eval_fraction = eval_fraction
         self.local_rank = local_rank
         self.world_size = world_size
         self.device = (
@@ -76,9 +86,7 @@ class Evaluator:
 
     def log_msg(self, msg: str):
         """Log a message."""
-        prefix = "Evaluator:"
-        if self.global_rank == 0:
-            self.logger.info(f"{prefix} {msg}")
+        self.logger.info(f"{msg}")
 
     @torch.inference_mode()
     def eval(self) -> dict[str, torch.Tensor]:
@@ -93,17 +101,18 @@ class Evaluator:
         for metric_name, _ in self.metrics.items():
             total_metrics[metric_name] = torch.tensor(0.0, device=self.device)
 
+        n_batches = int(len(self.dataloader) * self.eval_fraction)
+        log_interval = max(1, 10 ** math.floor(math.log10(max(1, n_batches // 100))))
+
         for i, data in enumerate(self.dataloader):
-            if (i + 1) % 100 == 0 or i == 0:
-                self.log_msg(f"Batch {i + 1}/{len(self.dataloader)}")
+            if (i + 1) % log_interval == 0 or i == 0:
+                self.log_msg(f"Batch {i + 1}/{n_batches}")
 
             x = data[0]
             target = data[1]
             x = x.to(self.device)
             target = target.to(self.device)
 
-            x = x.to(self.device)
-            target = target.to(self.device)
             with torch.autocast(
                 device_type=self.device.type,
                 dtype=self.amp_precision,
@@ -117,7 +126,10 @@ class Evaluator:
             for metric_name, metric_value in current_metrics.items():
                 total_metrics[metric_name] += metric_value.float()
 
+            if i + 1 >= n_batches:
+                break
+
         for metric_name, metric_value in total_metrics.items():
-            total_metrics[metric_name] /= len(self.dataloader)
+            total_metrics[metric_name] /= n_batches
 
         return total_metrics

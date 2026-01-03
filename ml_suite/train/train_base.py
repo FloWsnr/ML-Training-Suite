@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional, Any
 from pathlib import Path
 import time
+import math
 
 import torch
 import torch.distributed as dist
@@ -54,12 +55,22 @@ class Trainer:
         DataLoader for training data.
     val_dataloader : torch.utils.data.DataLoader
         DataLoader for validation data.
+    scaler : GradScaler
+        Gradient scaler for automatic mixed precision training.
     total_updates : int
         Total number of training updates/batches to perform.
     updates_per_epoch : int
         Number of updates to perform per epoch (before eval is done again).
     checkpoint_every_updates : int
         Frequency of checkpoint saves (in updates).
+    eval_fraction : float
+        Fraction of validation data to use during evaluation.
+    epoch : int
+        Current epoch (for resuming from checkpoints).
+    batches_trained : int
+        Batches already trained in previous runs (for resuming).
+    samples_trained : int
+        Samples already trained in previous runs (for resuming).
     output_dir : Path
         Directory path where checkpoints and logs will be saved.
     loss_fns : dict
@@ -109,9 +120,14 @@ class Trainer:
         lr_scheduler: Optional[torch.optim.lr_scheduler.LRScheduler],
         train_dataloader: torch.utils.data.DataLoader,
         val_dataloader: torch.utils.data.DataLoader,
+        scaler: GradScaler,
         total_updates: int,
         updates_per_epoch: int,
         checkpoint_every_updates: int,
+        eval_fraction: float,
+        epoch: int,
+        batches_trained: int,
+        samples_trained: int,
         output_dir: Path,
         loss_fns: dict,
         amp: bool = True,
@@ -129,7 +145,7 @@ class Trainer:
         self.lr_scheduler = lr_scheduler
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
-        self.logger = setup_logger("ML Suite")
+        self.logger = setup_logger("ML Suite", rank=global_rank)
         self.wandb_logger = wandb_logger
         self.global_rank = global_rank
         self.local_rank = local_rank
@@ -140,6 +156,7 @@ class Trainer:
         self.total_updates = total_updates
         self.updates_per_epoch = updates_per_epoch
         self.checkpoint_every_updates = checkpoint_every_updates
+        self.eval_fraction = eval_fraction
 
         self.time_keeper = TimeKeeper(time_limit=time_limit, global_rank=global_rank)
 
@@ -154,24 +171,35 @@ class Trainer:
             else torch.device("cpu")
         )
         self.ddp_enabled = dist.is_initialized()
-        self.use_amp = True
-        self.scaler = GradScaler(device=str(self.device), enabled=self.use_amp)
+        self.scaler = scaler
 
         if train_dataloader.batch_size is not None:
             batch_size = train_dataloader.batch_size * world_size
         else:
-            batch_size = 1
+            batch_size = 1 * world_size
 
         self.state = TrainingState(
-            epoch=1,
-            samples_trained=0,
-            batches_trained=0,
+            epoch=epoch,
+            samples_trained=samples_trained,
+            batches_trained=batches_trained,
             current_lr=self.optimizer.param_groups[0]["lr"],
             batch_size=batch_size,
             shutdown=torch.tensor(False, device=self.device),
         )
 
-    def run(self):
+    def run(self) -> None:
+        """Run training with error handling and cleanup."""
+        try:
+            self._run()
+        except Exception as e:
+            self.log_msg(f"Error during training: {e}")
+            if self.wandb_logger is not None:
+                self.wandb_logger.finish()
+            if self.ddp_enabled:
+                dist.destroy_process_group()
+            raise e
+
+    def _run(self):
         self.log_msg("Starting training")
         while self.state.batches_trained < self.total_updates:
             epoch_dir = self.output_dir / f"epoch_{self.state.epoch:04d}"
@@ -236,8 +264,16 @@ class Trainer:
             grad_scaler=self.scaler,
             scheduler=self.lr_scheduler,
         )
+        if self.wandb_logger is not None:
+            self.wandb_logger.finish()
+        if self.ddp_enabled:
+            dist.destroy_process_group()
+        self.log_msg("Training complete")
 
     def validate(self, epoch: int) -> None:
+        # Clear CUDA cache before validation to prevent memory fragmentation
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         epoch_dir = self.output_dir / f"epoch_{epoch:04d}"
         t_eval_start = time.time()
         evaluator = Evaluator(
@@ -245,6 +281,7 @@ class Trainer:
             dataloader=self.val_dataloader,
             metrics=self.loss_fns,
             eval_dir=epoch_dir,
+            eval_fraction=self.eval_fraction,
             amp=self.use_amp,
             amp_precision=self.amp_precision,
             global_rank=self.global_rank,
@@ -284,6 +321,8 @@ class Trainer:
         self.model.train()
         if self.ddp_enabled:
             self.train_dataloader.sampler.set_epoch(epoch)
+
+        log_interval = max(1, 10 ** math.floor(math.log10(max(1, n_updates // 100))))
 
         for i, data in enumerate(self.train_dataloader):
             x = data[0]
@@ -330,11 +369,12 @@ class Trainer:
                     "samples_trained": self.state.samples_trained,
                     "batches_trained": self.state.batches_trained,
                     "epoch": self.state.epoch,
+                    "learning_rate": self.state.current_lr,
                 }
                 self.wandb_logger.log(log_state, folder="train", commit=False)
                 self.wandb_logger.log(current_metrics, folder="train", commit=True)
 
-            if (i + 1) % 100 == 0 or i == n_updates - 1:
+            if (i + 1) % log_interval == 0 or i == n_updates - 1:
                 self.log_msg(
                     f"Epoch {self.state.epoch:03d} | Update {i + 1}/{n_updates} | "
                     + " | ".join([f"{k}: {v:.4f}" for k, v in current_metrics.items()])
@@ -372,6 +412,4 @@ class Trainer:
 
     def log_msg(self, msg: str):
         """Log a message."""
-        prefix = "Trainer:"
-        if self.global_rank == 0:
-            self.logger.info(f"{prefix} {msg}")
+        self.logger.info(f"{msg}")

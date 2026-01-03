@@ -3,6 +3,7 @@ import pytest
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from torch.amp.grad_scaler import GradScaler
 
 from ml_suite.train.train_base import Trainer, TrainingState
 from ml_suite.models.loss_fns import RMSE
@@ -76,6 +77,13 @@ def temp_output_dir(tmp_path):
     return tmp_path / "test_output"
 
 
+@pytest.fixture
+def real_scaler() -> GradScaler:
+    """Create a real PyTorch GradScaler for testing."""
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    return GradScaler(device=device, enabled=True)
+
+
 class TestTrainingState:
     """Test the TrainingState dataclass."""
 
@@ -116,6 +124,7 @@ class TestTrainer:
         real_lr_scheduler,
         real_dataloader,
         temp_output_dir,
+        real_scaler,
     ):
         """Test Trainer initialization."""
         trainer = Trainer(
@@ -125,9 +134,14 @@ class TestTrainer:
             lr_scheduler=real_lr_scheduler,
             train_dataloader=real_dataloader,
             val_dataloader=real_dataloader,
+            scaler=real_scaler,
             total_updates=100,
             updates_per_epoch=10,
             checkpoint_every_updates=50,
+            eval_fraction=1.0,
+            epoch=1,
+            batches_trained=0,
+            samples_trained=0,
             output_dir=temp_output_dir,
             loss_fns={"RMSE": RMSE(dims=None)},
             amp=True,
@@ -175,6 +189,7 @@ class TestTrainer:
         real_lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
         real_dataloader: DataLoader,
         temp_output_dir: Path,
+        real_scaler: GradScaler,
     ):
         """Test train_updates method."""
 
@@ -185,9 +200,14 @@ class TestTrainer:
             lr_scheduler=real_lr_scheduler,
             train_dataloader=real_dataloader,
             val_dataloader=real_dataloader,
+            scaler=real_scaler,
             total_updates=100,
             updates_per_epoch=10,
             checkpoint_every_updates=50,
+            eval_fraction=1.0,
+            epoch=1,
+            batches_trained=0,
+            samples_trained=0,
             output_dir=temp_output_dir,
             loss_fns={"RMSE": RMSE(dims=None)},
         )
@@ -215,6 +235,7 @@ class TestTrainer:
         real_lr_scheduler,
         real_dataloader,
         temp_output_dir,
+        real_scaler,
     ):
         """Test validate method."""
         trainer = Trainer(
@@ -224,9 +245,14 @@ class TestTrainer:
             lr_scheduler=real_lr_scheduler,
             train_dataloader=real_dataloader,
             val_dataloader=real_dataloader,
+            scaler=real_scaler,
             total_updates=100,
             updates_per_epoch=10,
             checkpoint_every_updates=50,
+            eval_fraction=1.0,
+            epoch=1,
+            batches_trained=0,
+            samples_trained=0,
             output_dir=temp_output_dir,
             loss_fns={"RMSE": RMSE(dims=None)},
         )
@@ -242,6 +268,7 @@ class TestTrainer:
         real_lr_scheduler,
         real_dataloader,
         temp_output_dir,
+        real_scaler,
     ):
         """Test run method basic functionality."""
         trainer = Trainer(
@@ -251,9 +278,14 @@ class TestTrainer:
             lr_scheduler=real_lr_scheduler,
             train_dataloader=real_dataloader,
             val_dataloader=real_dataloader,
+            scaler=real_scaler,
             total_updates=2,  # Small number for testing
             updates_per_epoch=1,
             checkpoint_every_updates=50,
+            eval_fraction=1.0,
+            epoch=1,
+            batches_trained=0,
+            samples_trained=0,
             output_dir=temp_output_dir,
             loss_fns={"RMSE": RMSE(dims=None)},
         )
@@ -268,6 +300,7 @@ class TestTrainer:
         real_lr_scheduler,
         real_dataloader,
         temp_output_dir,
+        real_scaler,
     ):
         """Test time limit and shutdown functionality."""
         trainer = Trainer(
@@ -277,9 +310,14 @@ class TestTrainer:
             lr_scheduler=real_lr_scheduler,
             train_dataloader=real_dataloader,
             val_dataloader=real_dataloader,
+            scaler=real_scaler,
             total_updates=100,
             updates_per_epoch=10,
             checkpoint_every_updates=50,
+            eval_fraction=1.0,
+            epoch=1,
+            batches_trained=0,
+            samples_trained=0,
             output_dir=temp_output_dir,
             loss_fns={"RMSE": RMSE(dims=None)},
             time_limit=0,  # no time limit
