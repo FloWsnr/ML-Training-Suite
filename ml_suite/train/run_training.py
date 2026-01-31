@@ -128,6 +128,10 @@ def main(
 
     dataset_train = get_dataset(config["dataset"], split="train")
     dataset_val = get_dataset(config["dataset"], split="valid")
+    persistent_workers = bool(config.get("persistent_workers", False))
+    persistent_workers_val = bool(
+        config.get("persistent_workers_val", persistent_workers)
+    )
 
     train_dataloader = get_dataloader(
         dataset=dataset_train,
@@ -136,6 +140,7 @@ def main(
         num_workers=num_workers,
         is_distributed=dist.is_initialized(),
         shuffle=True,
+        persistent_workers=persistent_workers,
     )
     val_dataloader = get_dataloader(
         dataset=dataset_val,
@@ -144,6 +149,7 @@ def main(
         num_workers=num_workers,
         is_distributed=dist.is_initialized(),
         shuffle=False,
+        persistent_workers=persistent_workers_val,
     )
 
     ############################################################

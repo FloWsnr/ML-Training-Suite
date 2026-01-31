@@ -21,6 +21,7 @@ def get_dataloader(
     num_workers: int,
     is_distributed: bool = False,
     shuffle: bool = True,
+    persistent_workers: bool = False,
 ) -> DataLoader:
     """Get a dataloader for the dataset.
 
@@ -40,6 +41,10 @@ def get_dataloader(
         Whether to use distributed sampling
     shuffle : bool
         Whether to shuffle the dataset
+    persistent_workers : bool
+        If True, workers are kept alive between batches/epochs. Reduces overhead
+        but increases memory usage. Set to False for eval dataloaders to avoid
+        OOM when train workers are also persistent.
     """
 
     if is_distributed:
@@ -57,6 +62,7 @@ def get_dataloader(
         num_workers=num_workers,
         pin_memory=True,
         sampler=sampler,
+        persistent_workers=persistent_workers and num_workers > 0,
         drop_last=True,
     )
 
