@@ -208,8 +208,10 @@ def main(
     functorch_config.activation_memory_budget = config.get("mem_budget", 1)
     compile_model = config.get("compile", False)
     if compile_model and not platform.system() == "Windows":
-        model = torch.compile(model, mode="max-autotune")
-        logger.info("Model compiled with torch.compile")
+        compile_mode = config.get("compile_mode", "default")
+        compile_fullgraph = config.get("compile_fullgraph", True)
+        model = torch.compile(model, mode=compile_mode, fullgraph=compile_fullgraph)
+        logger.info(f"Model compiled with torch.compile (mode={compile_mode}, fullgraph={compile_fullgraph})")
     if world_size > 1:
         model = DDP(
             model,

@@ -33,6 +33,8 @@ checkpoint_every_updates: 1e3 # number of updates between checkpoints
 amp: true # use automatic mixed precision
 precision: bfloat16 # precision for automatic mixed precision (float16, bfloat16)
 compile: true # if true, use torch.compile to compile the model (PyTorch 2.0+)
+compile_mode: "default" # torch.compile mode: default, reduce-overhead, max-autotune, max-autotune-no-cudagraphs
+compile_fullgraph: true # if true, compile the full graph (may break with dynamic control flow)
 
 ###############################################################
 ########### Model parameters ############################ ####
