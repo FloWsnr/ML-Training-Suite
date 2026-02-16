@@ -40,17 +40,20 @@ def time_str_to_seconds(time_str: str) -> float:
     return sum(x * int(t) for x, t in zip([3600, 60, 1], time_str.split(":")))
 
 
-def get_checkpoint_path(output_dir: Path, checkpoint_name: str) -> Path:
+def get_checkpoint_path(output_dir: Path, checkpoint_name: str | int) -> Path:
     if checkpoint_name == "latest":
-        checkpoint_path = output_dir / "latest.pt"
-    elif checkpoint_name == "best":
-        checkpoint_path = output_dir / "best.pt"
-    elif checkpoint_name.isdigit():
-        checkpoint_path = output_dir / f"epoch_{checkpoint_name}/checkpoint.pt"
+        return output_dir / "latest.pt"
+    if checkpoint_name == "best":
+        return output_dir / "best.pt"
+
+    if isinstance(checkpoint_name, int):
+        epoch = checkpoint_name
+    elif isinstance(checkpoint_name, str) and checkpoint_name.isdigit():
+        epoch = int(checkpoint_name)
     else:
         raise ValueError(f"Invalid checkpoint name: {checkpoint_name}")
 
-    return checkpoint_path
+    return output_dir / f"epoch_{epoch:04d}" / "checkpoint.pt"
 
 
 @record
@@ -101,16 +104,16 @@ def main(
     ############################################################
     ###### AMP #################################################
     ############################################################
-    use_amp = config.get("use_amp", True)
-    amp_precision_str = config.get("amp_precision", "bfloat16")
+    use_amp = bool(config["amp"])
+    amp_precision_str = config["precision"]
     if amp_precision_str == "bfloat16":
         amp_precision = torch.bfloat16
     elif amp_precision_str == "float16":
         amp_precision = torch.float16
     else:
-        print(f"Unknown amp_precision {amp_precision_str}, turing off AMP")
-        use_amp = False
-        amp_precision = torch.float32
+        raise ValueError(
+            f"Unknown precision {amp_precision_str}. Expected 'bfloat16' or 'float16'."
+        )
 
     max_grad_norm = config.get("max_grad_norm", None)
     if max_grad_norm is not None:
@@ -182,7 +185,7 @@ def main(
     ############################################################
     checkpoint: Optional[dict] = None
     cp_config: dict = config.get("checkpoint", {})
-    checkpoint_name: Optional[str] = cp_config.get("checkpoint_name", None)
+    checkpoint_name: Optional[str | int] = cp_config.get("checkpoint_name", None)
 
     if checkpoint_name is not None:
         logger.info(f"Loading checkpoint: {checkpoint_name}")

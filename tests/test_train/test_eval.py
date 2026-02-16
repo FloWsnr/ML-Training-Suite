@@ -61,3 +61,37 @@ def test_eval(
 
     for metric_name, metric_value in losses.items():
         assert metric_value.item() != 0.0
+
+
+def test_eval_tiny_fraction_uses_at_least_one_batch(
+    real_dataloader: DataLoader,
+    model: torch.nn.Module,
+    tmp_path: Path,
+    metrics: dict[str, torch.nn.Module],
+):
+    evaluator = Evaluator(
+        model=model,
+        dataloader=real_dataloader,
+        metrics=metrics,
+        eval_dir=tmp_path,
+        eval_fraction=0.1,
+    )
+    losses = evaluator.eval()
+    for metric_value in losses.values():
+        assert torch.isfinite(metric_value)
+
+
+def test_eval_fraction_zero_raises(
+    real_dataloader: DataLoader,
+    model: torch.nn.Module,
+    tmp_path: Path,
+    metrics: dict[str, torch.nn.Module],
+):
+    with pytest.raises(ValueError, match="eval_fraction must be in the range"):
+        Evaluator(
+            model=model,
+            dataloader=real_dataloader,
+            metrics=metrics,
+            eval_dir=tmp_path,
+            eval_fraction=0.0,
+        )

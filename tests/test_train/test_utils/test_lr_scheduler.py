@@ -87,3 +87,18 @@ class TestGetLrScheduler:
 
         with pytest.raises(ValueError, match="Only one milestone can be -1"):
             get_lr_scheduler(optimizer, lrs_config, total_batches=100)
+
+    def test_get_lr_scheduler_linear_defaults(self):
+        model = nn.Linear(10, 5)
+        optimizer = optim.AdamW(model.parameters(), lr=0.01)
+
+        lrs_config = {
+            "first_stage": {
+                "name": "LinearLR",
+                "num_updates": 10,
+            }
+        }
+
+        scheduler = get_lr_scheduler(optimizer, lrs_config, total_batches=10)
+
+        assert isinstance(scheduler, optim.lr_scheduler.SequentialLR)

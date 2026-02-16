@@ -31,7 +31,7 @@ class Evaluator:
     eval_dir : Path
         Directory to save evaluation results
     eval_fraction : float, optional
-        Fraction of validation data to use for evaluation (0.0-1.0), by default 1.0
+        Fraction of validation data to use for evaluation (0, 1], by default 1.0
     amp : bool, optional
         Whether to use automatic mixed precision, by default True
     amp_precision : torch.dtype, optional
@@ -62,6 +62,10 @@ class Evaluator:
     ):
         self.logger = logger or setup_logger("Evaluator", rank=global_rank)
         self.global_rank = global_rank
+        if not (0.0 < eval_fraction <= 1.0):
+            raise ValueError(
+                f"eval_fraction must be in the range (0, 1], got {eval_fraction}."
+            )
         self.eval_fraction = eval_fraction
         self.local_rank = local_rank
         self.world_size = world_size
@@ -101,7 +105,13 @@ class Evaluator:
         for metric_name, _ in self.metrics.items():
             total_metrics[metric_name] = torch.tensor(0.0, device=self.device)
 
-        n_batches = int(len(self.dataloader) * self.eval_fraction)
+        n_total_batches = len(self.dataloader)
+        if n_total_batches == 0:
+            raise ValueError("Validation dataloader is empty.")
+        n_batches = min(
+            n_total_batches,
+            max(1, math.ceil(n_total_batches * self.eval_fraction)),
+        )
         log_interval = max(1, 10 ** math.floor(math.log10(max(1, n_batches // 100))))
 
         for i, data in enumerate(self.dataloader):

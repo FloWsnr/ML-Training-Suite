@@ -33,24 +33,20 @@ class TestTimeKeeper:
 
     def test_update_estimate_epoch(self):
         keeper = TimeKeeper(time_limit=3600.0)
-        keeper.update_estimate(duration=10.0, state_key="avg_sec_per_epoch", n_phases=0)
+        keeper.update_estimate(duration=10.0, state_key="avg_sec_per_epoch")
         assert keeper.estimates.avg_sec_per_epoch == 10.0
 
-        keeper.update_estimate(duration=20.0, state_key="avg_sec_per_epoch", n_phases=1)
+        keeper.update_estimate(duration=20.0, state_key="avg_sec_per_epoch")
         assert keeper.estimates.avg_sec_per_epoch == 15.0
 
     def test_update_estimate_update_loop(self):
         keeper = TimeKeeper(time_limit=3600.0)
-        keeper.update_estimate(
-            duration=2.0, state_key="avg_sec_per_update_loop", n_phases=0
-        )
+        keeper.update_estimate(duration=2.0, state_key="avg_sec_per_update_loop")
         assert keeper.estimates.avg_sec_per_update_loop == 2.0
 
     def test_update_estimate_validation(self):
         keeper = TimeKeeper(time_limit=3600.0)
-        keeper.update_estimate(
-            duration=5.0, state_key="avg_sec_per_val_loop", n_phases=0
-        )
+        keeper.update_estimate(duration=5.0, state_key="avg_sec_per_val_loop")
         assert keeper.estimates.avg_sec_per_val_loop == 5.0
 
     def test_get_remaining_time_no_limit(self):
@@ -155,11 +151,16 @@ class TestTimeKeeper:
     def test_multiple_update_estimate_calls(self):
         keeper = TimeKeeper(time_limit=3600.0)
 
-        keeper.update_estimate(duration=10.0, state_key="avg_sec_per_epoch", n_phases=0)
+        keeper.update_estimate(duration=10.0, state_key="avg_sec_per_epoch")
         assert keeper.estimates.avg_sec_per_epoch == 10.0
 
-        keeper.update_estimate(duration=12.0, state_key="avg_sec_per_epoch", n_phases=1)
+        keeper.update_estimate(duration=12.0, state_key="avg_sec_per_epoch")
         assert keeper.estimates.avg_sec_per_epoch == 11.0
 
-        keeper.update_estimate(duration=8.0, state_key="avg_sec_per_epoch", n_phases=2)
+        keeper.update_estimate(duration=8.0, state_key="avg_sec_per_epoch")
         assert keeper.estimates.avg_sec_per_epoch == 10.0
+
+    def test_update_estimate_invalid_key_raises(self):
+        keeper = TimeKeeper(time_limit=3600.0)
+        with pytest.raises(KeyError, match="Unknown state_key"):
+            keeper.update_estimate(duration=1.0, state_key="bad_key")

@@ -58,3 +58,15 @@ class TestGetOptimizer:
 
         with pytest.raises(ValueError, match="Optimizer Adam not supported"):
             get_optimizer(model, config)
+
+    def test_get_optimizer_learning_rate_string(self):
+        model = nn.Linear(10, 5)
+        config = {
+            "name": "AdamW",
+            "learning_rate": "1e-3",
+        }
+
+        optimizer = get_optimizer(model, config)
+
+        assert isinstance(optimizer, torch.optim.AdamW)
+        assert optimizer.param_groups[0]["lr"] == 0.001

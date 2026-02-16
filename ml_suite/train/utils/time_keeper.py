@@ -56,8 +56,13 @@ class TimeKeeper:
             avg_sec_per_update_loop=0.0,
             avg_sec_per_val_loop=0.0,
         )
+        self._phase_counts: dict[str, int] = {
+            "avg_sec_per_epoch": 0,
+            "avg_sec_per_update_loop": 0,
+            "avg_sec_per_val_loop": 0,
+        }
 
-    def update_estimate(self, duration: float, state_key: str, n_phases: int) -> None:
+    def update_estimate(self, duration: float, state_key: str) -> None:
         """Update time estimates for different training phases.
 
         Parameters
@@ -67,12 +72,16 @@ class TimeKeeper:
         state_key : str
             Key in TimeEstimates to update
             ('avg_sec_per_epoch', 'avg_sec_per_update_loop', or 'avg_sec_per_val_loop')
-        n_phases : int
-            Number of phases to update the average time for
         """
+        if state_key not in self._phase_counts:
+            raise KeyError(
+                f"Unknown state_key '{state_key}'. Expected one of: {list(self._phase_counts.keys())}"
+            )
         current_avg = getattr(self.estimates, state_key)
+        n_phases = self._phase_counts[state_key]
         new_avg = (current_avg * n_phases + duration) / (n_phases + 1)
         setattr(self.estimates, state_key, new_avg)
+        self._phase_counts[state_key] = n_phases + 1
 
     def get_remaining_time(self) -> float:
         """Get remaining time in seconds.

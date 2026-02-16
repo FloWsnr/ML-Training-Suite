@@ -157,6 +157,8 @@ class Trainer:
         self.updates_per_epoch = updates_per_epoch
         self.checkpoint_every_updates = checkpoint_every_updates
         self.eval_fraction = eval_fraction
+        if self.checkpoint_every_updates <= 0:
+            raise ValueError("checkpoint_every_updates must be a positive integer.")
 
         self.time_keeper = TimeKeeper(time_limit=time_limit, global_rank=global_rank)
 
@@ -217,6 +219,7 @@ class Trainer:
             if self.state.shutdown:
                 break
             self.log_msg(f"Starting epoch {self.state.epoch}")
+            t_epoch_start = time.time()
             self.train_updates(n_updates=self.updates_per_epoch, epoch=self.state.epoch)
 
             # Save epoch checkpoint
@@ -247,9 +250,8 @@ class Trainer:
             self.validate(epoch=self.state.epoch)
 
             self.time_keeper.update_estimate(
-                time.time() - self.time_keeper.time_start,
+                time.time() - t_epoch_start,
                 "avg_sec_per_epoch",
-                self.state.epoch,
             )
             self.state.epoch += 1
 
@@ -297,9 +299,7 @@ class Trainer:
         ###################################################################################
         # Update validation loop time
         val_duration = time.time() - t_eval_start
-        self.time_keeper.update_estimate(
-            val_duration, "avg_sec_per_val_loop", self.state.epoch
-        )
+        self.time_keeper.update_estimate(val_duration, "avg_sec_per_val_loop")
         if self.wandb_logger is not None:
             log_state = {
                 "samples_trained": self.state.samples_trained,
@@ -383,11 +383,7 @@ class Trainer:
             ###################################################################################
             ######################## Checkpointing ############################################
             ###################################################################################
-            next_checkpoint = (
-                self.state.batches_trained // self.checkpoint_every_updates + 1
-            ) * self.checkpoint_every_updates
-
-            if self.state.batches_trained >= next_checkpoint - 1:
+            if self.state.batches_trained % self.checkpoint_every_updates == 0:
                 save_checkpoint(
                     global_rank=self.global_rank,
                     checkpoint_path=self.output_dir / "latest.pt",
@@ -406,9 +402,7 @@ class Trainer:
 
         # Update training loop time
         update_duration = time.time() - t_update_start
-        self.time_keeper.update_estimate(
-            update_duration, "avg_sec_per_update_loop", self.state.epoch
-        )
+        self.time_keeper.update_estimate(update_duration, "avg_sec_per_update_loop")
 
     def log_msg(self, msg: str):
         """Log a message."""

@@ -94,8 +94,8 @@ def get_lr_scheduler(
     for milestone, stage in zip(milestones, stages):
         stage_name = stage["name"]
         if stage_name == "LinearLR":
-            start_factor = float(stage["start_factor"])
-            end_factor = float(stage["end_factor"])
+            start_factor = float(stage.get("start_factor", 1.0))
+            end_factor = float(stage.get("end_factor", 1.0))
             scheduler = _get_linear_lr_scheduler(
                 optimizer,
                 num_updates=milestone,

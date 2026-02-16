@@ -26,7 +26,7 @@ def get_optimizer(model: nn.Module | DDP, config: dict) -> torch.optim.Optimizer
     torch.optim.Optimizer
         Optimizer
     """
-    lr = config["learning_rate"]
+    lr = float(config["learning_rate"])
     name = config["name"]
 
     if name == "AdamW":

@@ -2,6 +2,7 @@ from pathlib import Path
 import pytest
 import torch
 import torch.nn as nn
+from unittest.mock import patch
 from torch.utils.data import DataLoader
 from torch.amp.grad_scaler import GradScaler
 
@@ -259,6 +260,39 @@ class TestTrainer:
 
         # Run validation
         trainer.validate(epoch=1)
+
+    def test_checkpoint_saved_on_exact_frequency(
+        self,
+        real_model,
+        real_optimizer,
+        real_criterion,
+        real_lr_scheduler,
+        real_dataloader,
+        temp_output_dir,
+        real_scaler,
+    ):
+        trainer = Trainer(
+            model=real_model,
+            optimizer=real_optimizer,
+            criterion=real_criterion,
+            lr_scheduler=real_lr_scheduler,
+            train_dataloader=real_dataloader,
+            val_dataloader=real_dataloader,
+            scaler=real_scaler,
+            total_updates=100,
+            updates_per_epoch=10,
+            checkpoint_every_updates=2,
+            eval_fraction=1.0,
+            epoch=1,
+            batches_trained=0,
+            samples_trained=0,
+            output_dir=temp_output_dir,
+            loss_fns={"RMSE": RMSE(dims=None)},
+        )
+
+        with patch("ml_suite.train.train_base.save_checkpoint") as mock_save:
+            trainer.train_updates(n_updates=3, epoch=1)
+            assert mock_save.call_count == 1
 
     def test_run_method_basic(
         self,
